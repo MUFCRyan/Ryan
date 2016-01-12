@@ -1,0 +1,199 @@
+
+import java.util.ArrayList;
+
+import com.ryan.googleplay.R;
+import com.ryan.googleplay.utils.CommonUtil;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+import android.view.ViewGroup;
+
+public class FlowLayout extends ViewGroup {
+
+	private int mUsableWidth;
+	private int mHorizontalSpace = CommonUtil.getDimension(R.dimen.dp_30);
+	private int mVerticalSpace = CommonUtil.getDimension(R.dimen.dp_30);
+	private ArrayList<Line> lineList = new ArrayList<FlowLayout.Line>();
+
+	public FlowLayout(Context context, AttributeSet attrs, int defStyle) {
+		super(context, attrs, defStyle);
+	}
+
+	public FlowLayout(Context context, AttributeSet attrs) {
+		super(context, attrs);
+	}
+
+	public FlowLayout(Context context) {
+		super(context);
+	}
+
+	@Override
+	protected void onLayout(boolean changed, int l, int t, int r, int b) {
+		int mPaddingLeft = getPaddingLeft();
+		int mPaddingTop = getPaddingTop();
+		// 遍历line集合
+		for (int i = 0; i < lineList.size(); i++) {
+			// 获取其中的line对象
+			Line line = lineList.get(i);
+			// 获取每行的留白空间
+			int remainSpace = getRemainSpace(line);
+			// 从第二行开始，每行的top总是比上一行的top多一个行高和垂直间距
+			if (i > 0) {
+				mPaddingTop += lineList.get(i - 1).getTotalHeight()
+						+ mVerticalSpace;
+			}
+			// 从line中获取lineViews以便操作其中的view对象
+			ArrayList<View> lineViews = line.lineViews;
+			for (int j = 0; j < lineViews.size(); j++) {
+				// 获取每个view对象
+				View view = lineViews.get(j);
+				// 获取每行每个view应该分得的空间
+				float perSpace = (remainSpace * 1.0f / lineViews.size()) + 0.5f;
+				// 获取当前view加入留白宽度后的相应测量模式的宽度值
+				int widthMeasureSpec = MeasureSpec.makeMeasureSpec(
+						(int) (view.getMeasuredWidth() + perSpace),
+						MeasureSpec.EXACTLY);
+				// 重新测量view
+				view.measure(widthMeasureSpec, 0);
+				// 当该view为每行的第一个view时的布局
+				if (j == 0) {
+					view.layout(mPaddingLeft, mPaddingTop,
+							mPaddingLeft + view.getMeasuredWidth(), mPaddingTop
+									+ view.getMeasuredHeight());
+				} else {
+					// 当该view为每行的非第一个view时的布局
+					View preView = lineViews.get(j - 1);
+					int left = preView.getRight() + mHorizontalSpace;
+					view.layout(left, preView.getTop(),
+							left + view.getMeasuredWidth(), preView.getBottom());
+				}
+			}
+		}
+	}
+
+	@Override
+	protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+		super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+		// 获取FlowLayout的宽度
+		int width = MeasureSpec.getSize(widthMeasureSpec);
+		// 获取可用宽度
+		if (mUsableWidth == 0) {
+			mUsableWidth = width - getPaddingLeft() - getPaddingRight();
+		}
+		// 创建Line对象
+		Line line = new Line();
+		// 遍历所有的子View
+		for (int i = 0; i < getChildCount(); i++) {
+			View childView = getChildAt(i);
+			// 手动绘制view
+			childView.measure(0, 0);
+			// 判断是否为第一个子View
+			if (i == 0) {
+				// 若是就添加到line中
+				line.addViewToLine(childView);
+				// 判断当前子View的宽度加水平间距宽加之前的line的总宽是否超出了本行的可用宽度
+			} else if (childView.getMeasuredWidth() + line.getTotalWidth()
+					+ mHorizontalSpace > mUsableWidth) {
+				// 若超出就将line添加到lineList中
+				lineList.add(line);
+				// 新建line对象并向其中添加view对象
+				line = new Line();
+				line.addViewToLine(childView);
+			} else {
+				// 若未超出就将当前的view添加到line中
+				line.addViewToLine(childView);
+			}
+			// 判断是否为最后一个子View
+			if (i == getChildCount() - 1) {
+				// 若是,就将其所在的line添加到lineList中
+				lineList.add(line);
+			}
+		}
+		//将填充完毕的高度给FlowLayout设置回去
+		int height = getPaddingTop() + getPaddingBottom();
+		for (int i = 0; i < lineList.size(); i++) {
+			height += lineList.get(i).getTotalHeight();
+		}
+		height += (lineList.size() - 1) * mVerticalSpace;
+		setMeasuredDimension(width, height);
+	}
+
+	/**
+	 * 获取每行的剩余留白空间
+	 * 
+	 * @return
+	 */
+	private int getRemainSpace(Line line) {
+		return mUsableWidth - line.getTotalWidth();
+	}
+
+	class Line {
+		public ArrayList<View> lineViews = new ArrayList<View>();
+		public int totalWidth;
+		public int totalHeight;
+
+		/**
+		 * 将view添加到lineViews的集合中
+		 * 
+		 * @return
+		 */
+		public void addViewToLine(View view) {
+			if (!lineViews.contains(view)) {
+				if (lineViews.size() == 1) {
+					lineViews.add(view);
+					totalWidth += view.getMeasuredWidth();
+				} else {
+					lineViews.add(view);
+					totalWidth += mHorizontalSpace + view.getMeasuredWidth();
+				}
+				totalHeight = Math.max(totalHeight, view.getMeasuredHeight());
+			}
+		}
+
+		/**
+		 * 获取lineViews的集合
+		 * 
+		 * @return
+		 */
+		public ArrayList<View> getLineViews() {
+			return lineViews;
+		}
+
+		/**
+		 * 获取lineViews的宽度
+		 * 
+		 * @return
+		 */
+		public int getTotalWidth() {
+			return totalWidth;
+		}
+
+		/**
+		 * 获取lineViews的高度
+		 * 
+		 * @return
+		 */
+		public int getTotalHeight() {
+			return totalHeight;
+		}
+	}
+
+	/**
+	 * 设置view的水平间距
+	 * 
+	 * @param mHorizontalSpace
+	 */
+	public void setHorizontalSpace(int mHorizontalSpace) {
+		this.mHorizontalSpace = mHorizontalSpace;
+	}
+
+	/**
+	 * 设置view的垂直间距
+	 * 
+	 * @param mHorizontalSpace
+	 */
+	public void setVerticallSpace(int mVerticalSpace) {
+		this.mVerticalSpace = mVerticalSpace;
+	}
+}
